@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UFO Device Agent</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
+         background: #0d1117; color: #c9d1d9; font-size: 14px; }
+  header { padding: 14px 20px; border-bottom: 1px solid #21262d; display: flex; gap: 12px; align-items: baseline; }
+  header h1 { font-size: 16px; margin: 0; color: #e6edf3; }
+  header .sub { color: #8b949e; font-size: 12px; }
+  main { max-width: 880px; margin: 0 auto; padding: 20px; display: grid; gap: 16px; }
+  section { background: #161b22; border: 1px solid #21262d; border-radius: 8px; padding: 16px; }
+  h2 { margin: 0 0 12px; font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: #8b949e; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .kv { display: grid; grid-template-columns: 130px 1fr; gap: 4px 12px; }
+  .kv div:nth-child(odd) { color: #8b949e; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
+  .on  { background: #3fb950; box-shadow: 0 0 6px #3fb95088; }
+  .off { background: #f85149; }
+  .paused-dot { background: #d29922; }
+  button { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 6px;
+           padding: 6px 14px; cursor: pointer; font: inherit; }
+  button:hover { background: #30363d; }
+  button.ok { border-color: #238636; color: #3fb950; }
+  button.danger { border-color: #da3633; color: #f85149; }
+  input { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9;
+          padding: 6px 10px; font: inherit; }
+  #logs { max-height: 320px; overflow-y: auto; font-size: 12px; line-height: 1.7; }
+  #logs .t { color: #8b949e; margin-right: 8px; }
+  #logs .ty { color: #58a6ff; margin-right: 8px; }
+  .approval { border: 1px solid #d29922; border-radius: 6px; padding: 10px; margin-bottom: 8px; }
+  .approval .reason { color: #d29922; font-size: 12px; margin: 4px 0 8px; }
+  .banner { background: #1f6feb22; border: 1px solid #1f6feb; border-radius: 6px; padding: 10px; font-size: 12px; }
+  .err { color: #f85149; font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🛸 UFO Device Agent</h1>
+  <span class="sub" id="hdr-device">loading…</span>
+</header>
+<main>
+  <section id="pairing-section" hidden>
+    <h2>Pair this device</h2>
+    <div class="banner" style="margin-bottom:10px">
+      Get a pairing code from your control plane web UI (“Create pairing code”), then enter it here.
+    </div>
+    <div class="row">
+      <input id="pair-code" placeholder="ABCD-1234" size="12">
+      <input id="pair-relay" value="http://localhost:8000" size="28">
+      <button class="ok" onclick="doPair()">Pair</button>
+    </div>
+    <div class="err" id="pair-error"></div>
+  </section>
+
+  <section>
+    <h2>Status</h2>
+    <div class="kv" id="status-kv"></div>
+    <div class="row" style="margin-top:12px">
+      <button id="btn-pause" onclick="post('/api/pause')">⏸ Pause</button>
+      <button id="btn-resume" class="ok" onclick="post('/api/resume')">▶ Resume</button>
+    </div>
+  </section>
+
+  <section id="approvals-section" hidden>
+    <h2>⚠ Pending approvals</h2>
+    <div id="approvals"></div>
+  </section>
+
+  <section>
+    <h2>Recent activity</h2>
+    <div id="logs"></div>
+  </section>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+async function post(path) {
+  try { await fetch(path, { method: 'POST' }); } catch (e) {}
+  refresh();
+}
+
+async function doPair() {
+  $('#pair-error').textContent = '';
+  const res = await fetch('/api/pair', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code: $('#pair-code').value, relay_url: $('#pair-relay').value }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    $('#pair-error').textContent = body.detail || ('pairing failed: HTTP ' + res.status);
+  }
+  refresh();
+}
+
+async function approve(taskId, ok) {
+  await fetch(`/api/approvals/${taskId}/${ok ? 'approve' : 'deny'}`, { method: 'POST' });
+  refresh();
+}
+
+function renderStatus(s) {
+  $('#hdr-device').textContent = `${s.device_name} · v${s.agent_version} · backend: ${s.backend}`;
+  $('#pairing-section').hidden = s.paired;
+  const onlineDot = s.online ? '<span class="dot on"></span>online'
+                             : '<span class="dot off"></span>offline';
+  const pausedDot = s.paused ? '<span class="dot paused-dot"></span>PAUSED' : 'running';
+  const cur = s.current_task ? esc(s.current_task.instruction) : '—';
+  const last = s.last_result ? `${esc(s.last_result.status)}: ${esc(s.last_result.summary)}` : '—';
+  $('#status-kv').innerHTML = `
+    <div>relay</div><div>${onlineDot}${s.relay_url ? ' · ' + esc(s.relay_url) : ''}</div>
+    <div>state</div><div>${pausedDot}</div>
+    <div>device id</div><div>${esc(s.device_id || 'not paired')}</div>
+    <div>current task</div><div>${cur}</div>
+    <div>last result</div><div>${last}</div>`;
+  const ap = s.pending_approvals || [];
+  $('#approvals-section').hidden = ap.length === 0;
+  $('#approvals').innerHTML = ap.map(a => `
+    <div class="approval">
+      <div>${esc(a.instruction)}</div>
+      <div class="reason">${esc(a.reason)}</div>
+      <button class="ok" onclick="approve('${a.task_id}', true)">✓ Approve</button>
+      <button class="danger" onclick="approve('${a.task_id}', false)">✗ Deny</button>
+    </div>`).join('');
+}
+
+function renderLogs(logs) {
+  const el = $('#logs');
+  const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 30;
+  el.innerHTML = logs.slice(-100).map(l => {
+    const p = l.payload || {};
+    const text = p.message || p.summary || p.instruction || p.reason || JSON.stringify(p);
+    return `<div><span class="t">${esc((l.ts || '').slice(11, 19))}</span>` +
+           `<span class="ty">${esc(l.type)}</span>${esc(text)}</div>`;
+  }).join('');
+  if (atBottom) el.scrollTop = el.scrollHeight;
+}
+
+async function refresh() {
+  try {
+    const [s, logs] = await Promise.all([
+      fetch('/api/status').then(r => r.json()),
+      fetch('/api/logs').then(r => r.json()),
+    ]);
+    renderStatus(s);
+    renderLogs(logs);
+  } catch (e) {
+    $('#hdr-device').textContent = 'agent not responding';
+  }
+}
+refresh();
+setInterval(refresh, 2000);
+</script>
+</body>
+</html>

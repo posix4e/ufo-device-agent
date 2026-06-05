@@ -1,0 +1,38 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ufo-device-agent"
+version = "0.1.0"
+description = "End-user Windows device agent wrapper around Microsoft UFO²: pair via QR/code, connect outbound to a control plane, run AI-driven GUI tasks with human approval."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "websockets>=12.0",
+    "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+    "typer>=0.12",
+    "rich>=13.7",
+    "PyYAML>=6.0",
+    "httpx>=0.27",
+    "qrcode[pil]>=7.4",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-asyncio>=0.23", "ruff>=0.4"]
+# The MCP bridge is optional; install with: pip install -e ".[mcp]"
+mcp = ["mcp>=1.0"]
+
+[project.scripts]
+ufo-agent = "agent.main:run"
+
+[tool.hatch.build.targets.wheel]
+packages = ["agent", "control_plane"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"

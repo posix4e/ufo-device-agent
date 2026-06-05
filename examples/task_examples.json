@@ -1,0 +1,32 @@
+[
+  {
+    "instruction": "Open Notepad and type hello from the agent.",
+    "require_approval": false,
+    "_expect": "runs immediately on the mock backend; logs stream back"
+  },
+  {
+    "instruction": "Open Bambu Studio and load the latest 3MF file from Downloads.",
+    "require_approval": false,
+    "_expect": "allowed app; runs immediately"
+  },
+  {
+    "instruction": "Install the new printer driver from the downloads folder.",
+    "require_approval": false,
+    "_expect": "pauses with approval_required — 'install' matches the install_software risk category"
+  },
+  {
+    "instruction": "Buy the filament that is in my shopping cart and submit the order.",
+    "require_approval": false,
+    "_expect": "pauses with approval_required — matches the purchase category"
+  },
+  {
+    "instruction": "Open the Banking app and check my balance.",
+    "require_approval": false,
+    "_expect": "denied outright — 'Banking' is in blocked_apps"
+  },
+  {
+    "instruction": "Take a screenshot of the desktop.",
+    "require_approval": true,
+    "_expect": "operator forced require_approval=true; waits for approval even though policy allows it"
+  }
+]

@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UFO Device Agent — Control Plane</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
+         background: #0d1117; color: #c9d1d9; font-size: 14px; }
+  header { padding: 14px 20px; border-bottom: 1px solid #21262d; display: flex; gap: 12px;
+           align-items: baseline; flex-wrap: wrap; }
+  header h1 { font-size: 16px; margin: 0; color: #e6edf3; }
+  .warn { color: #d29922; font-size: 12px; border: 1px solid #d29922; border-radius: 4px; padding: 1px 8px; }
+  main { max-width: 1080px; margin: 0 auto; padding: 20px; display: grid; gap: 16px;
+         grid-template-columns: 320px 1fr; align-items: start; }
+  section { background: #161b22; border: 1px solid #21262d; border-radius: 8px; padding: 16px; }
+  h2 { margin: 0 0 12px; font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: #8b949e; }
+  .col { display: grid; gap: 16px; }
+  button { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 6px;
+           padding: 6px 14px; cursor: pointer; font: inherit; }
+  button:hover { background: #30363d; }
+  button.ok { border-color: #238636; color: #3fb950; }
+  button.danger { border-color: #da3633; color: #f85149; }
+  input, textarea { background: #0d1117; border: 1px solid #30363d; border-radius: 6px;
+                    color: #c9d1d9; padding: 6px 10px; font: inherit; width: 100%; }
+  textarea { resize: vertical; min-height: 60px; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
+  .on  { background: #3fb950; box-shadow: 0 0 6px #3fb95088; }
+  .off { background: #f85149; }
+  .device { padding: 8px 10px; border: 1px solid #21262d; border-radius: 6px; margin-bottom: 6px;
+            cursor: pointer; }
+  .device:hover, .device.sel { border-color: #1f6feb; background: #1f6feb18; }
+  .device .id { color: #8b949e; font-size: 11px; }
+  #pair-result { margin-top: 10px; }
+  #pair-result .code { font-size: 26px; letter-spacing: 3px; color: #3fb950; }
+  #pair-result img { margin-top: 8px; background: #fff; border-radius: 6px; padding: 6px; }
+  #events { max-height: 380px; overflow-y: auto; font-size: 12px; line-height: 1.7; }
+  #events .t { color: #8b949e; margin-right: 8px; }
+  #events .ty { color: #58a6ff; margin-right: 8px; }
+  .approval-row { border: 1px solid #d29922; border-radius: 6px; padding: 8px; margin: 6px 0; }
+  .muted { color: #8b949e; font-size: 12px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
+  #screenshot img { max-width: 100%; border: 1px solid #30363d; border-radius: 6px; }
+  .err { color: #f85149; font-size: 12px; min-height: 1em; }
+  label { font-size: 12px; color: #8b949e; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🛸 UFO Device Agent — Control Plane</h1>
+  <span class="warn">dev mode — single shared admin token</span>
+  <span style="flex:1"></span>
+  <label>admin token <input id="token" size="18" style="width:auto"></label>
+</header>
+<main>
+  <div class="col">
+    <section>
+      <h2>Pairing</h2>
+      <button class="ok" onclick="createPairing()">＋ Create pairing code</button>
+      <div id="pair-result"></div>
+      <div class="muted" style="margin-top:8px">Codes are single-use and expire in 10 minutes.<br>
+        On the device: enter the code in the agent's local UI, or<br>
+        <code>python -m agent.main pair --code XXXX-XXXX --relay &lt;this url&gt;</code>
+      </div>
+    </section>
+    <section>
+      <h2>Devices</h2>
+      <div id="devices" class="muted">no devices yet</div>
+    </section>
+  </div>
+
+  <div class="col">
+    <section id="detail" hidden>
+      <h2 id="detail-title">Device</h2>
+      <div class="muted" id="detail-meta"></div>
+      <div class="row">
+        <button onclick="cmd('pause')">⏸ Pause</button>
+        <button class="ok" onclick="cmd('resume')">▶ Resume</button>
+        <button onclick="observe()">📷 Observe screen</button>
+      </div>
+      <div id="approvals"></div>
+      <h2 style="margin-top:14px">Submit task</h2>
+      <textarea id="task-instruction" placeholder="Open Notepad and type hello from the agent."></textarea>
+      <div class="row">
+        <label><input type="checkbox" id="task-approval" style="width:auto"> force approval</label>
+        <button class="ok" onclick="submitTask()">Run task ➤</button>
+        <span class="err" id="task-error"></span>
+      </div>
+      <div id="screenshot"></div>
+      <h2 style="margin-top:14px">Events</h2>
+      <div id="events"></div>
+    </section>
+    <section id="detail-empty">
+      <div class="muted">Select a device to view events, submit tasks, and handle approvals.</div>
+    </section>
+  </div>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let selected = null;
+
+$('#token').value = localStorage.getItem('adminToken') || 'dev-admin-token';
+$('#token').addEventListener('change', () => localStorage.setItem('adminToken', $('#token').value));
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, {
+    ...opts,
+    headers: { 'Content-Type': 'application/json', 'X-Admin-Token': $('#token').value, ...(opts.headers || {}) },
+  });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || ('HTTP ' + res.status));
+  return res.json();
+}
+
+async function createPairing() {
+  try {
+    const p = await api('/api/admin/pairing', { method: 'POST' });
+    $('#pair-result').innerHTML =
+      `<div class="code">${esc(p.code)}</div>` +
+      `<div class="muted">expires ${new Date(p.expires_at).toLocaleTimeString()}</div>` +
+      `<img src="${esc(p.qr_png_url)}" width="160" height="160" alt="pairing QR">`;
+  } catch (e) {
+    $('#pair-result').innerHTML = `<div class="err">${esc(e.message)}</div>`;
+  }
+}
+
+async function refreshDevices() {
+  let devices;
+  try { devices = await api('/api/admin/devices'); }
+  catch (e) { $('#devices').innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
+  if (!devices.length) { $('#devices').innerHTML = '<span class="muted">no devices yet</span>'; return; }
+  $('#devices').innerHTML = devices.map(d => `
+    <div class="device ${d.device_id === selected ? 'sel' : ''}" onclick="selectDevice('${d.device_id}')">
+      <span class="dot ${d.online ? 'on' : 'off'}"></span>${esc(d.device_name)}
+      ${d.last_status?.paused ? ' <span style="color:#d29922">⏸</span>' : ''}
+      <div class="id">${esc(d.device_id)}</div>
+    </div>`).join('');
+  if (selected) renderDetail(devices.find(d => d.device_id === selected));
+}
+
+function selectDevice(id) {
+  selected = id;
+  $('#detail').hidden = false;
+  $('#detail-empty').hidden = true;
+  refreshDevices();
+  refreshEvents();
+}
+
+function renderDetail(d) {
+  if (!d) return;
+  $('#detail-title').textContent = d.device_name;
+  const s = d.last_status || {};
+  const cur = s.current_task ? `running: ${esc(s.current_task.instruction)}` : 'idle';
+  $('#detail-meta').innerHTML =
+    `${d.online ? '<span class="dot on"></span>online' : '<span class="dot off"></span>offline'}` +
+    ` · backend: ${esc(s.backend || '?')} · ${s.paused ? '<span style="color:#d29922">PAUSED</span>' : cur}` +
+    `<br>id: ${esc(d.device_id)} · last seen: ${d.last_seen ? new Date(d.last_seen).toLocaleTimeString() : '—'}`;
+  const ap = s.pending_approvals || [];
+  $('#approvals').innerHTML = ap.map(a => `
+    <div class="approval-row">
+      ⚠ <b>approval required:</b> ${esc(a.instruction)}
+      <div class="muted">${esc(a.reason)}</div>
+      <div class="row">
+        <button class="ok" onclick="resolve('${a.task_id}', 'approve')">✓ Approve</button>
+        <button class="danger" onclick="resolve('${a.task_id}', 'deny')">✗ Deny</button>
+      </div>
+    </div>`).join('');
+}
+
+async function refreshEvents() {
+  if (!selected) return;
+  try {
+    const events = await api(`/api/admin/devices/${selected}/events?limit=100`);
+    const el = $('#events');
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 30;
+    el.innerHTML = events.map(e => {
+      const p = e.payload || {};
+      const text = p.message || p.summary || p.instruction || JSON.stringify(p);
+      return `<div><span class="t">${esc((e.ts || '').slice(11, 19))}</span>` +
+             `<span class="ty">${esc(e.type)}</span>${esc(text)}</div>`;
+    }).join('');
+    if (atBottom) el.scrollTop = el.scrollHeight;
+  } catch (e) { /* device list will surface auth errors */ }
+}
+
+async function submitTask() {
+  $('#task-error').textContent = '';
+  try {
+    await api(`/api/admin/devices/${selected}/tasks`, {
+      method: 'POST',
+      body: JSON.stringify({
+        instruction: $('#task-instruction').value,
+        require_approval: $('#task-approval').checked,
+      }),
+    });
+    $('#task-instruction').value = '';
+  } catch (e) { $('#task-error').textContent = e.message; }
+}
+
+async function cmd(action) {
+  try { await api(`/api/admin/devices/${selected}/${action}`, { method: 'POST' }); }
+  catch (e) { $('#task-error').textContent = e.message; }
+}
+
+async function resolve(taskId, action) {
+  try {
+    await api(`/api/admin/devices/${selected}/${action}`, {
+      method: 'POST', body: JSON.stringify({ task_id: taskId }),
+    });
+  } catch (e) { $('#task-error').textContent = e.message; }
+}
+
+async function observe() {
+  try {
+    await cmd('observe');
+    setTimeout(async () => {
+      try {
+        const shot = await api(`/api/admin/devices/${selected}/screenshot`);
+        $('#screenshot').innerHTML =
+          `<div class="muted">${esc(shot.description || '')} · ${esc(shot.captured_at || '')}</div>` +
+          (shot.screenshot_b64 ? `<img src="data:image/png;base64,${shot.screenshot_b64}">` : '');
+      } catch (e) {}
+    }, 1500);
+  } catch (e) { $('#task-error').textContent = e.message; }
+}
+
+refreshDevices();
+setInterval(refreshDevices, 3000);
+setInterval(refreshEvents, 2000);
+</script>
+</body>
+</html>

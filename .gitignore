@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# Env / secrets — never commit tokens
+.env
+*.local.yaml
+
+# Control plane dev data (contains device tokens!)
+control_plane_data/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Test
+.pytest_cache/
+.ruff_cache/

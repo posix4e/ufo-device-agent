@@ -1,0 +1,27 @@
+# Example safety policy for the UFO Device Agent.
+# Copy to the agent data dir (the agent prints its path on startup, e.g.
+# %LOCALAPPDATA%\UfoDeviceAgent\policy.yaml) or edit the one auto-created
+# there on first run.
+#
+# mode: allow_all | ask_before_risky | always_ask
+mode: ask_before_risky
+
+# Apps the agent may be asked to use. (MVP: informational; matching only.)
+allowed_apps:
+  - Chrome
+  - Bambu Studio
+  - Excel
+
+# If an instruction mentions any of these, the task is denied outright.
+blocked_apps:
+  - Banking
+  - Password Manager
+
+# Risk categories that force a human approval before the task runs.
+# MVP matching is keyword-based (see agent/policy.py CATEGORY_KEYWORDS).
+require_approval:
+  - install_software
+  - delete_files
+  - submit_form
+  - purchase
+  - send_email

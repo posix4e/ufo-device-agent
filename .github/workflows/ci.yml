@@ -1,0 +1,83 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      - run: ruff check .
+      # Full mock vertical slice as subprocesses: pair -> online -> task ->
+      # logs -> policy deny -> approval flow. No UFO2 needed.
+      - run: pytest -q
+
+  build-windows-exe:
+    runs-on: windows-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e . pyinstaller
+      # One-file console exe: ufo-agent.exe {pair,start,status,unpair}
+      # --collect-all uvicorn: uvicorn loads loops/protocols dynamically.
+      # --add-data: the agent local UI template is read from package data.
+      - name: Build ufo-agent.exe
+        run: >
+          pyinstaller --noconfirm --onefile --console --name ufo-agent
+          --add-data "agent/ui/templates;agent/ui/templates"
+          --collect-all uvicorn
+          --collect-submodules websockets
+          packaging/entry_agent.py
+      - name: Smoke-test the exe
+        shell: pwsh
+        run: |
+          ./dist/ufo-agent.exe --help
+          ./dist/ufo-agent.exe status
+          # Boot the agent unpaired; verify the local UI answers, then stop it.
+          $p = Start-Process -PassThru -NoNewWindow ./dist/ufo-agent.exe -ArgumentList 'start','--backend','mock'
+          $ok = $false
+          foreach ($i in 1..30) {
+            Start-Sleep 1
+            try {
+              $s = Invoke-RestMethod http://127.0.0.1:8766/api/status
+              if ($s.backend -eq 'mock') { $ok = $true; break }
+            } catch {}
+          }
+          Stop-Process -Id $p.Id -Force
+          if (-not $ok) { throw "packaged agent local UI never came up" }
+          Write-Host "packaged agent OK: device_name=$($s.device_name)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ufo-agent-windows-x64
+          path: dist/ufo-agent.exe
+
+  release:
+    # Tag a commit vX.Y.Z to publish the exe on a GitHub Release.
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    needs: build-windows-exe
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ufo-agent-windows-x64
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: ufo-agent.exe
+          generate_release_notes: true
