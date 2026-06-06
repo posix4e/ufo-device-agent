@@ -89,7 +89,8 @@
         <button onclick="systemTask('lock', 'Lock workstation')">🔒 Lock</button>
         <button onclick="systemTask('restart', 'Restart device')">⟳ Restart</button>
         <button class="danger" onclick="systemTask('power_off', 'Power off device')">⏻ Power off</button>
-        <span class="muted">— all require approval</span>
+        <button onclick="updateAgent()">⬆ Update agent</button>
+        <span class="muted">— lock/restart/power off require approval</span>
       </div>
       <div id="approvals"></div>
       <h2 style="margin-top:14px">Submit task</h2>
@@ -180,7 +181,8 @@ function renderDetail(d) {
   const cur = s.current_task ? `running: ${esc(s.current_task.instruction)}` : 'idle';
   $('#detail-meta').innerHTML =
     `${d.online ? '<span class="dot on"></span>online' : '<span class="dot off"></span>offline'}` +
-    ` · backend: ${esc(s.backend || '?')} · ${s.paused ? '<span style="color:#d29922">PAUSED</span>' : cur}` +
+    ` · backend: ${esc(s.backend || '?')} · v${esc(s.agent_version || '?')}` +
+    ` · ${s.paused ? '<span style="color:#d29922">PAUSED</span>' : cur}` +
     `<br>id: ${esc(d.device_id)} · last seen: ${d.last_seen ? new Date(d.last_seen).toLocaleTimeString() : '—'}`;
   const ap = s.pending_approvals || [];
   $('#approvals').innerHTML = ap.map(a => `
@@ -238,6 +240,13 @@ async function systemTask(type, label) {
       body: JSON.stringify({ type, instruction: label }),
     });
   } catch (e) { $('#task-error').textContent = e.message; }
+}
+
+async function updateAgent() {
+  $('#task-error').textContent = '';
+  if (!confirm('Update this agent to the latest release?\n\nIf newer, it self-updates and briefly goes offline while it restarts. Only the packaged exe acts on this.')) return;
+  try { await api(`/api/admin/devices/${selected}/update`, { method: 'POST' }); }
+  catch (e) { $('#task-error').textContent = e.message; }
 }
 
 async function resolve(taskId, action) {

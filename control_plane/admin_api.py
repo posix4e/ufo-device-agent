@@ -138,3 +138,13 @@ async def pause_device(device_id: str, request: Request) -> dict[str, Any]:
 async def resume_device(device_id: str, request: Request) -> dict[str, Any]:
     await _send_or_409(request, device_id, "resume", {})
     return {"ok": True}
+
+
+@router.post("/devices/{device_id}/update")
+async def update_device(device_id: str, request: Request) -> dict[str, Any]:
+    """Ask the device to self-update to the latest published release.
+
+    Only the packaged exe acts on this; a source-run agent reports update_failed.
+    The device goes offline -> online at the new version if it updates."""
+    await _send_or_409(request, device_id, "update_agent", {})
+    return {"ok": True, "note": "update requested; watch the device's version in the status"}

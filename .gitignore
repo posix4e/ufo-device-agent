@@ -11,6 +11,9 @@ venv/
 .env
 *.local.yaml
 
+# CI-generated build version stamp (baked into the released exe only)
+agent/_buildinfo.py
+
 # Control plane dev data (contains device tokens!)
 control_plane_data/
 

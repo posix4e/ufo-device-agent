@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import Any
+from typing import Any, Callable
 
 import websockets
 from rich.console import Console
@@ -18,6 +18,7 @@ from .config import AGENT_VERSION, AgentSettings
 from .models import DeviceMsg, RelayMsg, Task
 from .storage import AgentState, AgentStorage
 from .task_runner import TaskRunner
+from .updater import maybe_self_update
 
 console = Console()
 
@@ -38,6 +39,8 @@ class RelayClient:
         self.runner = runner
         self.connected = False
         self._ws: websockets.WebSocketClientProtocol | None = None
+        # Set by main(): stops the local UI server so a self-update can relaunch.
+        self.on_update_shutdown: Callable[[], None] | None = None
 
     # --- sending -------------------------------------------------------------
 
@@ -164,8 +167,30 @@ class RelayClient:
             # (signing? user confirmation in the local UI?).
             console.log("[yellow]update_policy received — not applied in MVP (see TODO)[/yellow]")
 
+        elif mtype == RelayMsg.UPDATE_AGENT:
+            asyncio.create_task(self._self_update(payload.get("target_version")))
+
         else:
             console.log(f"[yellow]unknown relay message type: {mtype}[/yellow]")
+
+    async def _self_update(self, target_version: str | None) -> None:
+        """Operator-triggered update. Runs the (blocking) updater off-loop; on a
+        successful swap it stops the local UI server and the process exits so the
+        freshly-spawned new exe takes over."""
+        try:
+            replaced = await asyncio.to_thread(
+                maybe_self_update,
+                self.settings,
+                self.storage,
+                trigger="relay",
+                target_version=target_version,
+                on_shutdown=self.on_update_shutdown,
+            )
+        except Exception as exc:  # noqa: BLE001 — never let an update crash the agent
+            await self.send(DeviceMsg.UPDATE_FAILED, {"error": str(exc)})
+            return
+        if not replaced:
+            await self.send(DeviceMsg.UPDATE_FAILED, {"error": "no update applied (already current or unavailable)"})
 
     async def _observe(self) -> None:
         try:

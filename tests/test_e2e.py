@@ -71,6 +71,7 @@ def stack(tmp_path: Path):
             "UFO_AGENT_DATA_DIR": str(tmp_path / "agent"),
             "UFO_AGENT_LOCAL_UI_PORT": str(ui_port),
             "UFO_AGENT_HEARTBEAT_SECONDS": "2",
+            "UFO_AGENT_DISABLE_AUTOUPDATE": "1",  # source run is already inert; be explicit
         },
     )
     try:

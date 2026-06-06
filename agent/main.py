@@ -28,6 +28,7 @@ from .relay_client import RelayClient
 from .storage import AgentStorage
 from .task_runner import TaskRunner
 from .ui.local_server import create_local_ui
+from .updater import maybe_self_update
 
 app = typer.Typer(
     help="UFO Device Agent — pair this machine with a control plane and run AI-driven GUI tasks.",
@@ -87,6 +88,12 @@ async def _run(settings: AgentSettings, backend_name: str) -> None:
     ensure_local_identity(state, settings.device_name)
     storage.save_state(state)
 
+    # Auto-update BEFORE binding the UI / connecting. No-op unless running as the
+    # frozen exe with updates enabled. If it swaps the binary it relaunches and
+    # returns True; we then exit and let the new process take over.
+    if await asyncio.to_thread(maybe_self_update, settings, storage, trigger="startup"):
+        return
+
     policy = load_policy(storage.policy_path)
     backend_impl = _make_backend(backend_name)
     runner = TaskRunner(backend_impl, policy, approval_timeout=settings.approval_timeout_seconds)
@@ -97,6 +104,15 @@ async def _run(settings: AgentSettings, backend_name: str) -> None:
     server = uvicorn.Server(
         uvicorn.Config(ui_app, host=settings.local_ui_host, port=settings.local_ui_port, log_level="warning")
     )
+
+    # Let the relay's update_agent handler stop the local UI server (thread-safe)
+    # so the just-spawned new process can bind port 8766.
+    loop = asyncio.get_running_loop()
+
+    def _request_ui_shutdown() -> None:
+        loop.call_soon_threadsafe(setattr, server, "should_exit", True)
+
+    relay.on_update_shutdown = _request_ui_shutdown
 
     ui_url = f"http://{settings.local_ui_host}:{settings.local_ui_port}"
     lines = [
@@ -115,11 +131,32 @@ async def _run(settings: AgentSettings, backend_name: str) -> None:
 
     relay_task = asyncio.create_task(relay.run())
     try:
-        await server.serve()  # returns on Ctrl+C
+        await _serve_with_bind_retry(server, settings)  # returns on Ctrl+C / update
     finally:
         relay_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await relay_task
+
+
+async def _serve_with_bind_retry(server: uvicorn.Server, settings: AgentSettings) -> None:
+    """Serve the local UI, retrying the port bind briefly.
+
+    Right after a self-update the old process may not have released port 8766
+    yet; rather than crash, wait for it. This also fixes the long-standing
+    'address already in use' race on quick restarts.
+    """
+    deadline = asyncio.get_running_loop().time() + 15.0
+    while True:
+        try:
+            await server.serve()
+            return
+        except OSError as exc:
+            # 10048 (win) / EADDRINUSE (posix): the previous agent is still here.
+            if asyncio.get_running_loop().time() >= deadline:
+                raise
+            console.log(f"[yellow]port {settings.local_ui_port} busy ({exc}); retrying…[/yellow]")
+            server.should_exit = False
+            await asyncio.sleep(1.0)
 
 
 @app.command()

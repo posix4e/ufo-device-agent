@@ -34,18 +34,39 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -e . pyinstaller
+      # Stamp the build version so the released exe reports >= its tag (else the
+      # startup auto-update would loop). Tag builds -> the tag; others -> 0.0.0+sha.
+      - name: Generate _buildinfo.py
+        shell: pwsh
+        run: |
+          $ref = "${{ github.ref }}"
+          if ($ref -like 'refs/tags/v*') { $ver = $ref -replace '^refs/tags/v','' }
+          else { $ver = "0.0.0+$('${{ github.sha }}'.Substring(0,7))" }
+          "BUILD_VERSION = `"$ver`"`nGIT_SHA = `"${{ github.sha }}`"`n" | Out-File -Encoding ascii agent/_buildinfo.py
+          Get-Content agent/_buildinfo.py
       # One-file console exe: ufo-agent.exe {pair,start,status,unpair}
       # --collect-all uvicorn: uvicorn loads loops/protocols dynamically.
       # --add-data: the agent local UI template is read from package data.
+      # --hidden-import: _buildinfo is imported in a try/except (version stamp).
       - name: Build ufo-agent.exe
         run: >
           pyinstaller --noconfirm --onefile --console --name ufo-agent
           --add-data "agent/ui/templates;agent/ui/templates"
           --collect-all uvicorn
           --collect-submodules websockets
+          --hidden-import agent._buildinfo
           packaging/entry_agent.py
+      - name: Publish sha256
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash dist/ufo-agent.exe -Algorithm SHA256).Hash.ToLower()
+          "$hash  ufo-agent.exe" | Out-File -Encoding ascii dist/ufo-agent.exe.sha256
+          Get-Content dist/ufo-agent.exe.sha256
       - name: Smoke-test the exe
         shell: pwsh
+        env:
+          # MANDATORY: this is the one frozen context; stop it self-updating mid-test.
+          UFO_AGENT_DISABLE_AUTOUPDATE: "1"
         run: |
           ./dist/ufo-agent.exe --help
           ./dist/ufo-agent.exe status
@@ -61,11 +82,13 @@ jobs:
           }
           Stop-Process -Id $p.Id -Force
           if (-not $ok) { throw "packaged agent local UI never came up" }
-          Write-Host "packaged agent OK: device_name=$($s.device_name)"
+          Write-Host "packaged agent OK: v$($s.agent_version) device_name=$($s.device_name)"
       - uses: actions/upload-artifact@v4
         with:
           name: ufo-agent-windows-x64
-          path: dist/ufo-agent.exe
+          path: |
+            dist/ufo-agent.exe
+            dist/ufo-agent.exe.sha256
 
   release:
     # Tag a commit vX.Y.Z to publish the exe on a GitHub Release.
@@ -80,5 +103,7 @@ jobs:
           name: ufo-agent-windows-x64
       - uses: softprops/action-gh-release@v2
         with:
-          files: ufo-agent.exe
+          files: |
+            ufo-agent.exe
+            ufo-agent.exe.sha256
           generate_release_notes: true

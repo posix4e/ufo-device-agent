@@ -6,11 +6,11 @@ Every WebSocket frame is a JSON object: ``{"type": "<msg type>", "payload": {...
 
 Device -> Relay message types (``DeviceMsg``):
     device_hello, device_status, task_started, task_log, task_completed,
-    task_failed, approval_required, screenshot_available
+    task_failed, approval_required, screenshot_available, update_failed
 
 Relay -> Device message types (``RelayMsg``):
     run_task, observe_screen, approve_action, deny_action, pause, resume,
-    update_policy
+    update_policy, update_agent
 """
 
 from __future__ import annotations
@@ -45,6 +45,7 @@ class DeviceMsg:
     TASK_FAILED = "task_failed"
     APPROVAL_REQUIRED = "approval_required"
     SCREENSHOT_AVAILABLE = "screenshot_available"
+    UPDATE_FAILED = "update_failed"
 
 
 class RelayMsg:
@@ -57,6 +58,7 @@ class RelayMsg:
     PAUSE = "pause"
     RESUME = "resume"
     UPDATE_POLICY = "update_policy"
+    UPDATE_AGENT = "update_agent"
 
 
 class WsMessage(BaseModel):

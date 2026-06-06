@@ -53,6 +53,8 @@ create pairing code → pair → device online → submit task → policy check 
 - ✅ Agent: pairing, outbound relay client w/ reconnect, task runner,
   policy (keyword MVP), approvals, local web UI, app-data storage
 - ✅ MCP bridge (optional extra): list/run/observe/approve/pause tools
+- ✅ Device controls: power off / restart / lock (approval-gated)
+- ✅ Silent auto-update of the packaged exe (startup check + operator push)
 - 🟡 UFO² backend: clean stub with integration plan ([docs/ufo_integration.md](docs/ufo_integration.md))
 - 🟡 Windows service/tray: structured stubs ([docs/windows_service_model.md](docs/windows_service_model.md))
 - ⬜ QR *scanning* on the agent (QR generation works; manual entry today)
@@ -152,6 +154,30 @@ Tools: `list_devices`, `get_device_status`, `run_device_task`,
 `resume_device`, `get_device_events`. Points at the control plane admin API
 (`UFO_CP_URL`, `UFO_CP_ADMIN_TOKEN`). Config example in
 [`agent/mcp_bridge/server_stub.py`](agent/mcp_bridge/server_stub.py).
+
+## Auto-update
+
+The packaged `ufo-agent.exe` keeps itself current from GitHub Releases — **no
+Python, no reinstall**. Two triggers, both silent (download → verify → restart):
+
+- **On startup**: each `start` checks the `latest` release and self-updates if newer.
+- **Operator push**: "⬆ Update agent" in the dashboard (`POST /api/admin/devices/{id}/update`).
+
+How a build becomes an update:
+
+1. Push a tag `vX.Y.Z` → CI builds `ufo-agent.exe`, stamps it with that version,
+   and publishes it **plus `ufo-agent.exe.sha256`** to a GitHub Release.
+   *(Plain pushes only produce a CI **artifact** — not a Release — so they never trigger updates.)*
+2. Agents compare their embedded version to the release tag, download the new
+   exe, verify the sha256, **self-test it (`--help`/`status`) before swapping**,
+   rename-swap the running binary, relaunch, and reconnect.
+
+Safety: the running exe is never deleted until a verified replacement boots
+(rename-first + pre-swap self-test); a target that fails 3× is abandoned
+(no boot-loop); only the frozen exe ever acts (source/dev runs are inert).
+Disable per-device with `UFO_AGENT_DISABLE_AUTOUPDATE=1`. Integrity is
+sha256-vs-published-hash (corruption, not authenticity) — code-signing is the
+hardening path. See the design in [the plan](#) / `agent/updater.py`.
 
 ## Security
 
