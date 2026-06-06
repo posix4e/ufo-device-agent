@@ -29,6 +29,15 @@ class ConnectionManager:
     def is_connected(self, device_id: str) -> bool:
         return device_id in self._sockets
 
+    async def close(self, device_id: str, code: int = 1000, reason: str = "") -> None:
+        """Drop a device's socket (e.g. when its record is deleted)."""
+        ws = self._sockets.pop(device_id, None)
+        if ws is not None:
+            try:
+                await ws.close(code=code, reason=reason)
+            except Exception:
+                pass
+
     async def send(self, device_id: str, type_: str, payload: dict[str, Any]) -> bool:
         """Push a message to a device. Returns False if the device is offline."""
         ws = self._sockets.get(device_id)

@@ -55,6 +55,19 @@ async def list_devices(request: Request) -> list[dict[str, Any]]:
     return out
 
 
+@router.delete("/devices/{device_id}")
+async def delete_device(device_id: str, request: Request) -> dict[str, Any]:
+    """Forget a device: drop any live socket, then erase its record + history.
+
+    The device will need to be re-paired (its stored token is now unknown)."""
+    registry = request.app.state.registry
+    if registry.get(device_id) is None:
+        raise HTTPException(status_code=404, detail="unknown device")
+    await request.app.state.connections.close(device_id, reason="device deleted")
+    registry.remove(device_id)
+    return {"ok": True, "device_id": device_id}
+
+
 @router.get("/devices/{device_id}/events")
 async def device_events(device_id: str, request: Request, limit: int = 100) -> list[dict[str, Any]]:
     registry = request.app.state.registry

@@ -29,10 +29,14 @@
   .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
   .on  { background: #3fb950; box-shadow: 0 0 6px #3fb95088; }
   .off { background: #f85149; }
-  .device { padding: 8px 10px; border: 1px solid #21262d; border-radius: 6px; margin-bottom: 6px;
+  .device { position: relative; padding: 8px 10px; border: 1px solid #21262d; border-radius: 6px; margin-bottom: 6px;
             cursor: pointer; }
   .device:hover, .device.sel { border-color: #1f6feb; background: #1f6feb18; }
   .device .id { color: #8b949e; font-size: 11px; }
+  .device .del { position: absolute; top: 6px; right: 6px; width: 22px; height: 22px; padding: 0;
+                 line-height: 1; border-radius: 4px; color: #8b949e; opacity: 0; }
+  .device:hover .del { opacity: 1; }
+  .device .del:hover { color: #f85149; border-color: #da3633; }
   #pair-result { margin-top: 10px; }
   #pair-result .code { font-size: 26px; letter-spacing: 3px; color: #3fb950; }
   #pair-result img { margin-top: 8px; background: #fff; border-radius: 6px; padding: 6px; }
@@ -133,11 +137,25 @@ async function refreshDevices() {
   if (!devices.length) { $('#devices').innerHTML = '<span class="muted">no devices yet</span>'; return; }
   $('#devices').innerHTML = devices.map(d => `
     <div class="device ${d.device_id === selected ? 'sel' : ''}" onclick="selectDevice('${d.device_id}')">
+      <button class="del" title="Forget this device" onclick="deleteDevice(event, '${d.device_id}', '${esc(d.device_name)}')">×</button>
       <span class="dot ${d.online ? 'on' : 'off'}"></span>${esc(d.device_name)}
       ${d.last_status?.paused ? ' <span style="color:#d29922">⏸</span>' : ''}
       <div class="id">${esc(d.device_id)}</div>
     </div>`).join('');
   if (selected) renderDetail(devices.find(d => d.device_id === selected));
+}
+
+async function deleteDevice(ev, id, name) {
+  ev.stopPropagation();  // don't select the row we're deleting
+  if (!confirm(`Forget device "${name}"?\n\nIts history is erased and it must be re-paired to return.`)) return;
+  try { await api(`/api/admin/devices/${id}`, { method: 'DELETE' }); }
+  catch (e) { alert(e.message); return; }
+  if (selected === id) {
+    selected = null;
+    $('#detail').hidden = true;
+    $('#detail-empty').hidden = false;
+  }
+  refreshDevices();
 }
 
 function selectDevice(id) {

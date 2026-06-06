@@ -140,3 +140,12 @@ def test_full_vertical_slice(stack: dict) -> None:
     )
     assert failed["payload"]["status"] == "failed"
     assert "could not parse" in failed["payload"]["summary"]
+
+    # Delete the device: it disappears from the registry and its history 404s.
+    assert http("DELETE", f"{cp}/api/admin/devices/{dev_id}", headers=ADMIN)["ok"]
+    assert all(d["device_id"] != dev_id for d in http("GET", f"{cp}/api/admin/devices", headers=ADMIN))
+    with pytest.raises(urllib.error.HTTPError):
+        http("GET", f"{cp}/api/admin/devices/{dev_id}/events", headers=ADMIN)
+    # Deleting again is a clean 404.
+    with pytest.raises(urllib.error.HTTPError):
+        http("DELETE", f"{cp}/api/admin/devices/{dev_id}", headers=ADMIN)

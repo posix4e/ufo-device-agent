@@ -70,6 +70,23 @@ class DeviceRegistry:
     def list_devices(self) -> list[DeviceRecord]:
         return list(self._devices.values())
 
+    def remove(self, device_id: str) -> bool:
+        """Forget a device entirely: record, token, events, status, screenshot.
+
+        The device keeps its local token until it next tries to connect, at
+        which point the relay rejects the now-unknown token (4401) and it must
+        be re-paired. Returns False if there was no such device.
+        """
+        rec = self._devices.pop(device_id, None)
+        if rec is None:
+            return False
+        self._by_token.pop(rec.device_token, None)
+        self._events.pop(device_id, None)
+        self._last_status.pop(device_id, None)
+        self._screenshots.pop(device_id, None)
+        self._save()
+        return True
+
     def touch(self, device_id: str) -> None:
         rec = self._devices.get(device_id)
         if rec:
