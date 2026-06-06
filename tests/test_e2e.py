@@ -141,6 +141,22 @@ def test_full_vertical_slice(stack: dict) -> None:
     assert failed["payload"]["status"] == "failed"
     assert "could not parse" in failed["payload"]["summary"]
 
+    # Privileged system task: power_off is ALWAYS approval-gated. DENY it here
+    # (approving would shut down the CI runner). Verifies the gate, not the act.
+    power = http("POST", f"{cp}/api/admin/devices/{dev_id}/tasks",
+                 {"type": "power_off", "instruction": "Power off device"}, headers=ADMIN)
+    p_appr = wait_until(
+        lambda: next((e for e in events() if e["type"] == "approval_required"
+                      and e["payload"]["task_id"] == power["task_id"]), None)
+    )
+    assert "power_off" in p_appr["payload"]["reason"]
+    http("POST", f"{cp}/api/admin/devices/{dev_id}/deny", {"task_id": power["task_id"]}, headers=ADMIN)
+    p_denied = wait_until(
+        lambda: next((e for e in events() if e["type"] == "task_failed"
+                      and e["payload"]["task_id"] == power["task_id"]), None)
+    )
+    assert p_denied["payload"]["status"] == "denied"
+
     # Delete the device: it disappears from the registry and its history 404s.
     assert http("DELETE", f"{cp}/api/admin/devices/{dev_id}", headers=ADMIN)["ok"]
     assert all(d["device_id"] != dev_id for d in http("GET", f"{cp}/api/admin/devices", headers=ADMIN))

@@ -67,6 +67,21 @@ class WsMessage(BaseModel):
 # --- task / result models ----------------------------------------------------
 
 
+class TaskType:
+    """Task kinds. run_instruction goes to the GUI automation backend;
+    the system_* kinds are privileged device controls (always approval-gated)
+    handled outside the backend."""
+
+    RUN_INSTRUCTION = "run_instruction"
+    POWER_OFF = "power_off"
+    RESTART = "restart"
+    LOCK = "lock"
+
+
+# Privileged, OS-level device actions — never silently executed.
+SYSTEM_TASK_TYPES = frozenset({TaskType.POWER_OFF, TaskType.RESTART, TaskType.LOCK})
+
+
 class TaskStatus(str, Enum):
     PENDING = "pending"
     RUNNING = "running"

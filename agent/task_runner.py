@@ -15,8 +15,9 @@ from typing import Any, Awaitable, Callable
 from rich.console import Console
 
 from .automation.base import DeviceAutomationBackend
-from .models import DeviceMsg, Task, TaskResult, TaskStatus, utc_now
+from .models import SYSTEM_TASK_TYPES, DeviceMsg, Task, TaskResult, TaskStatus, utc_now
 from .policy import Policy
+from .system_control import run_system_task
 
 EventSender = Callable[[str, dict[str, Any]], Awaitable[None]]
 
@@ -140,8 +141,14 @@ class TaskRunner:
             {"task_id": task.task_id, "instruction": task.instruction, "policy": decision.action},
         )
 
-        if task.require_approval or decision.action == "require_approval":
-            reason = decision.reason or "task was flagged require_approval"
+        # Privileged system actions (power off / restart / lock) are ALWAYS
+        # approval-gated, regardless of policy mode or the require_approval flag.
+        is_system = task.type in SYSTEM_TASK_TYPES
+        if task.require_approval or decision.action == "require_approval" or is_system:
+            reason = (
+                f"privileged device action '{task.type}'" if is_system
+                else decision.reason or "task was flagged require_approval"
+            )
             approved = await self._wait_for_approval(task, reason)
             if not approved:
                 result = TaskResult(
@@ -159,7 +166,11 @@ class TaskRunner:
         await self._resume_event.wait()
 
         try:
-            result = await self.backend.run_instruction(task.instruction)
+            if is_system:
+                await self.emit(DeviceMsg.TASK_LOG, {"task_id": task.task_id, "message": f"executing {task.type}"})
+                result = await run_system_task(task.type)
+            else:
+                result = await self.backend.run_instruction(task.instruction)
             result.task_id = task.task_id
         except Exception as exc:
             result = TaskResult(

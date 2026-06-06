@@ -84,6 +84,13 @@
         <button class="ok" onclick="cmd('resume')">▶ Resume</button>
         <button onclick="observe()">📷 Observe screen</button>
       </div>
+      <div class="row">
+        <span class="muted">device:</span>
+        <button onclick="systemTask('lock', 'Lock workstation')">🔒 Lock</button>
+        <button onclick="systemTask('restart', 'Restart device')">⟳ Restart</button>
+        <button class="danger" onclick="systemTask('power_off', 'Power off device')">⏻ Power off</button>
+        <span class="muted">— all require approval</span>
+      </div>
       <div id="approvals"></div>
       <h2 style="margin-top:14px">Submit task</h2>
       <textarea id="task-instruction" placeholder="Open Notepad and type hello from the agent."></textarea>
@@ -220,6 +227,17 @@ async function submitTask() {
 async function cmd(action) {
   try { await api(`/api/admin/devices/${selected}/${action}`, { method: 'POST' }); }
   catch (e) { $('#task-error').textContent = e.message; }
+}
+
+async function systemTask(type, label) {
+  $('#task-error').textContent = '';
+  if (!confirm(`${label}?\n\nThis is sent as a privileged "${type}" task and still needs approval on the device.`)) return;
+  try {
+    await api(`/api/admin/devices/${selected}/tasks`, {
+      method: 'POST',
+      body: JSON.stringify({ type, instruction: label }),
+    });
+  } catch (e) { $('#task-error').textContent = e.message; }
 }
 
 async function resolve(taskId, action) {
