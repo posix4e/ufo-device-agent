@@ -108,9 +108,18 @@ class BasicAutomationBackend(DeviceAutomationBackend):
     async def open_app(self, app_name: str) -> TaskResult:
         cmd = APP_ALIASES.get(app_name.strip().lower(), app_name.strip())
         await self.emit_log(f"(basic) launching: {cmd}")
-        await asyncio.to_thread(_run_hidden, ["cmd", "/c", "start", "", cmd])
+        # Fire-and-forget WITHOUT pipes: the launched GUI app inherits stdio
+        # handles, so capturing output would block until the app exits.
+        await asyncio.to_thread(
+            subprocess.Popen,
+            ["cmd", "/c", "start", "", cmd],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=CREATE_NO_WINDOW,
+        )
         await asyncio.sleep(1.5)  # give the window time to appear and take focus
-        return TaskResult(status=TaskStatus.COMPLETED, summary=f"launched {cmd}")
+        return TaskResult(status=TaskStatus.COMPLETED, summary=f"dispatched launch of {cmd}")
 
     async def type_text(self, text: str) -> TaskResult:
         await self.emit_log(f"(basic) typing {len(text)} characters into the focused window")
