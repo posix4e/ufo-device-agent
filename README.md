@@ -2,6 +2,13 @@
 
 [![ci](https://github.com/posix4e/ufo-device-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/posix4e/ufo-device-agent/actions/workflows/ci.yml)
 
+> 🧪 **Prototype / reference POC.** This monorepo proved out the end-to-end
+> vertical slice. The real implementation lives in two standalone repos:
+> [**ufo-control-plane**](https://github.com/posix4e/ufo-control-plane) (hosted service)
+> and [**ufo-agent**](https://github.com/posix4e/ufo-agent) (Windows endpoint, with a
+> [download page](https://posix4e.github.io/ufo-agent)). This repo is kept as the
+> working reference, not the product.
+
 **Install once. Scan QR. Your AI can now safely use this Windows PC.**
 
 An open-source, end-user **Windows device agent** that wraps
