@@ -16,6 +16,7 @@ import os
 import secrets
 from datetime import timedelta
 
+import qrcode
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 
@@ -106,10 +107,6 @@ async def pairing_qr(code: str, request: Request) -> Response:
     and expires in 10 minutes.
     """
     payload = json.dumps({"v": 1, "code": code.strip().upper(), "relay_url": _public_base_url(request)})
-    try:
-        import qrcode
-    except ImportError:
-        raise HTTPException(status_code=501, detail="qrcode package not installed")
     img = qrcode.make(payload)
     buf = io.BytesIO()
     img.save(buf, format="PNG")

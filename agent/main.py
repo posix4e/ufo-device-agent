@@ -2,7 +2,7 @@
 
 Usage:
     python -m agent.main pair --code ABCD-1234 --relay http://localhost:8000
-    python -m agent.main start [--backend mock|ufo]
+    python -m agent.main start [--backend basic|ufo]
     python -m agent.main status
     python -m agent.main unpair
 """
@@ -19,7 +19,7 @@ from rich.console import Console
 from rich.panel import Panel
 
 from .automation.base import DeviceAutomationBackend
-from .automation.mock_backend import MockAutomationBackend
+from .automation.basic_backend import BasicAutomationBackend
 from .automation.ufo_backend import BackendUnavailableError, UfoAutomationBackend
 from .config import AGENT_VERSION, AgentSettings
 from .identity import PairingError, claim_pairing_code, ensure_local_identity
@@ -39,9 +39,9 @@ console = Console()
 def _make_backend(name: str) -> DeviceAutomationBackend:
     if name == "ufo":
         return UfoAutomationBackend()
-    if name == "mock":
-        return MockAutomationBackend()
-    raise typer.BadParameter(f"unknown backend '{name}' (expected: mock, ufo)")
+    if name == "basic":
+        return BasicAutomationBackend()
+    raise typer.BadParameter(f"unknown backend '{name}' (expected: basic, ufo)")
 
 
 @app.command()
@@ -66,7 +66,7 @@ def pair(
 
 @app.command()
 def start(
-    backend: Optional[str] = typer.Option(None, "--backend", help="Automation backend: mock (default) or ufo"),
+    backend: Optional[str] = typer.Option(None, "--backend", help="Automation backend: basic (default) or ufo"),
 ) -> None:
     """Run the agent: relay connection + local UI + task runner."""
     settings = AgentSettings()

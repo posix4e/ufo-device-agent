@@ -1,14 +1,17 @@
-"""End-to-end test of the mock vertical slice, exactly as CI runs it.
+"""End-to-end test of the vertical slice with the real `basic` backend.
 
-Spins up the control plane and the agent as real subprocesses on free ports,
-then drives the full flow over HTTP: create pairing code -> pair via the
-agent's local UI -> device online -> run task -> logs stream -> completed ->
-policy denial. No UFO², no Windows required.
+Windows-only (the basic backend does real native actions). Spins up the
+control plane and agent as subprocesses on free ports, then drives the full
+flow over HTTP: create pairing code -> pair via the agent's local UI ->
+device online -> run a real task (launches Notepad on the runner) -> logs
+stream -> completed -> policy denial -> approval flow ending in an HONEST
+failure (the basic backend refuses instructions it cannot actually perform).
 """
 
 from __future__ import annotations
 
 import json
+import os
 import socket
 import subprocess
 import sys
@@ -18,6 +21,8 @@ import urllib.request
 from pathlib import Path
 
 import pytest
+
+pytestmark = pytest.mark.skipif(sys.platform != "win32", reason="basic backend does real Windows GUI actions")
 
 REPO = Path(__file__).resolve().parents[1]
 ADMIN = {"X-Admin-Token": "dev-admin-token"}
@@ -56,13 +61,13 @@ def stack(tmp_path: Path):
     cp = subprocess.Popen(
         [sys.executable, "-m", "uvicorn", "control_plane.main:app", "--host", "127.0.0.1", "--port", str(cp_port)],
         cwd=REPO,
-        env={**__import__("os").environ, "UFO_CP_DATA_DIR": str(tmp_path / "cp")},
+        env={**os.environ, "UFO_CP_DATA_DIR": str(tmp_path / "cp")},
     )
     agent = subprocess.Popen(
-        [sys.executable, "-m", "agent.main", "start", "--backend", "mock"],
+        [sys.executable, "-m", "agent.main", "start", "--backend", "basic"],
         cwd=REPO,
         env={
-            **__import__("os").environ,
+            **os.environ,
             "UFO_AGENT_DATA_DIR": str(tmp_path / "agent"),
             "UFO_AGENT_LOCAL_UI_PORT": str(ui_port),
             "UFO_AGENT_HEARTBEAT_SECONDS": "2",
@@ -78,13 +83,14 @@ def stack(tmp_path: Path):
                 proc.wait(timeout=10)
             except subprocess.TimeoutExpired:
                 proc.kill()
+        subprocess.run(["taskkill", "/IM", "notepad.exe", "/F"], capture_output=True)  # clean up the real Notepad
 
 
-def test_full_mock_vertical_slice(stack: dict) -> None:
+def test_full_vertical_slice(stack: dict) -> None:
     cp, ui = stack["cp"], stack["ui"]
 
     # Both servers come up.
-    wait_until(lambda: http("GET", f"{ui}/api/status")["backend"] == "mock")
+    wait_until(lambda: http("GET", f"{ui}/api/status")["backend"] == "basic")
     wait_until(lambda: http("GET", f"{cp}/api/admin/devices", headers=ADMIN) == [])
 
     # Pair: create code on the control plane, claim it via the agent local UI.
@@ -101,25 +107,25 @@ def test_full_mock_vertical_slice(stack: dict) -> None:
     )
     dev_id = device["device_id"]
 
-    # Run a task; logs stream back and it completes.
-    task = http("POST", f"{cp}/api/admin/devices/{dev_id}/tasks", {"instruction": "Open Notepad and type hello."},
-                headers=ADMIN)
-    assert task["ok"]
-
     def events() -> list:
         return http("GET", f"{cp}/api/admin/devices/{dev_id}/events?limit=200", headers=ADMIN)
 
-    wait_until(lambda: any(e["type"] == "task_completed" for e in events()))
-    assert sum(1 for e in events() if e["type"] == "task_log") >= 3
+    # Real task: actually launches Notepad on this machine.
+    task = http("POST", f"{cp}/api/admin/devices/{dev_id}/tasks", {"instruction": "Open Notepad."}, headers=ADMIN)
+    assert task["ok"]
+    wait_until(lambda: any(e["type"] == "task_completed" and e["payload"]["task_id"] == task["task_id"]
+                           for e in events()))
 
     # Policy: blocked app is denied without execution.
     http("POST", f"{cp}/api/admin/devices/{dev_id}/tasks", {"instruction": "Open the Banking app."}, headers=ADMIN)
     denied = wait_until(
-        lambda: next((e for e in events() if e["type"] == "task_failed" and "Banking" in e["payload"].get("summary", "")), None)
+        lambda: next((e for e in events() if e["type"] == "task_failed"
+                      and "Banking" in e["payload"].get("summary", "")), None)
     )
     assert denied["payload"]["status"] == "denied"
 
-    # Policy: risky task pauses for approval; operator approves; it completes.
+    # Approval flow: risky task pauses; operator approves; then the backend
+    # FAILS HONESTLY because it cannot actually perform an install.
     risky = http("POST", f"{cp}/api/admin/devices/{dev_id}/tasks", {"instruction": "Install the new printer driver."},
                  headers=ADMIN)
     approval = wait_until(
@@ -128,5 +134,9 @@ def test_full_mock_vertical_slice(stack: dict) -> None:
     )
     http("POST", f"{cp}/api/admin/devices/{dev_id}/approve", {"task_id": approval["payload"]["task_id"]},
          headers=ADMIN)
-    wait_until(lambda: any(e["type"] == "task_completed" and e["payload"]["task_id"] == risky["task_id"]
-                           for e in events()))
+    failed = wait_until(
+        lambda: next((e for e in events() if e["type"] == "task_failed"
+                      and e["payload"]["task_id"] == risky["task_id"]), None)
+    )
+    assert failed["payload"]["status"] == "failed"
+    assert "could not parse" in failed["payload"]["summary"]

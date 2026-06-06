@@ -1,7 +1,11 @@
-"""Automation backends: the only layer that touches the GUI (or pretends to)."""
+"""Automation backends: the only layer that touches the GUI.
+
+basic — real native Windows actions (open app, type, screenshot), no planning.
+ufo   — Microsoft UFO² (milestone 2; fails loudly until wired).
+"""
 
 from .base import DeviceAutomationBackend
-from .mock_backend import MockAutomationBackend
+from .basic_backend import BasicAutomationBackend
 from .ufo_backend import UfoAutomationBackend
 
-__all__ = ["DeviceAutomationBackend", "MockAutomationBackend", "UfoAutomationBackend"]
+__all__ = ["BasicAutomationBackend", "DeviceAutomationBackend", "UfoAutomationBackend"]

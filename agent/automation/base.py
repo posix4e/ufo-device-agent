@@ -1,9 +1,9 @@
 """Automation backend interface.
 
 Anything that can look at the screen and drive the GUI implements this.
-The mock backend lets the whole pairing/relay/task pipeline run without UFO²
-installed; the real implementation lives in ``ufo_backend.py`` and is the only
-module allowed to import UFO².
+``basic_backend.py`` does real native Windows actions today;
+``ufo_backend.py`` is the UFO² integration and the only module allowed to
+import UFO². Backends do real work or fail loudly — no simulation.
 
 Backends never talk to the network. The TaskRunner owns policy, approvals and
 event emission; backends only do (or simulate) GUI work and stream progress

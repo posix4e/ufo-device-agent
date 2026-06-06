@@ -49,7 +49,7 @@ def ufo_available() -> bool:
 
 _NOT_WIRED = (
     "UfoAutomationBackend is not wired up yet. "
-    "Run with the default mock backend (--backend mock), or see "
+    "Run with the default basic backend (--backend basic), or see "
     "docs/ufo_integration.md for the integration plan."
 )
 

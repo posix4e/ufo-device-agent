@@ -25,16 +25,12 @@ from typing import Any
 
 from .tools import McpBridgeClient
 
-try:
-    from mcp.server.fastmcp import FastMCP
-except ImportError:  # mcp is an optional extra
-    FastMCP = None  # type: ignore[assignment]
+# mcp is an optional extra: pip install -e ".[mcp]". If it's missing, this
+# import fails loudly right here — no degraded mode.
+from mcp.server.fastmcp import FastMCP
 
 
-def build_server() -> "FastMCP":
-    if FastMCP is None:
-        raise RuntimeError("MCP SDK not installed — run: pip install -e \".[mcp]\"")
-
+def build_server() -> FastMCP:
     client = McpBridgeClient(
         base_url=os.environ.get("UFO_CP_URL", "http://localhost:8000"),
         admin_token=os.environ.get("UFO_CP_ADMIN_TOKEN", "dev-admin-token"),

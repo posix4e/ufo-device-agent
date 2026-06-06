@@ -21,7 +21,8 @@
                          │  (127.0.0.1:8766, approve/deny/pause)      │
                          └────────────────────────────────────────────┘
                                               │
-                                   MockAutomationBackend (default)
+                                   BasicAutomationBackend (default: real
+                                     native open/type/screenshot, no planning)
                                    UfoAutomationBackend  → Microsoft UFO²
 ```
 
@@ -45,9 +46,9 @@
   backend execution → event emission. Also the shared runtime state
   (paused, current task, recent logs, pending approvals). Tasks are serial.
 - **policy.py** — YAML policy, keyword-matched at task intake (MVP).
-- **automation/** — backend interface + mock + UFO² stub. The *only* layer
-  that touches (or simulates) the GUI. `ufo_backend.py` is the single module
-  allowed to import UFO².
+- **automation/** — backend interface + basic native backend + UFO² stub.
+  The *only* layer that touches the GUI; backends do real work or fail
+  loudly. `ufo_backend.py` is the single module allowed to import UFO².
 - **ui/local_server.py** — loopback-only web UI: status, logs, pause/resume,
   approve/deny, and pairing.
 - **identity.py / storage.py** — local identity, pairing claim, app-data

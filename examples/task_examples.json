@@ -2,22 +2,22 @@
   {
     "instruction": "Open Notepad and type hello from the agent.",
     "require_approval": false,
-    "_expect": "runs immediately on the mock backend; logs stream back"
+    "_expect": "basic backend: Notepad actually opens on the device and the text is typed"
   },
   {
-    "instruction": "Open Bambu Studio and load the latest 3MF file from Downloads.",
+    "instruction": "Open calculator.",
     "require_approval": false,
-    "_expect": "allowed app; runs immediately"
+    "_expect": "basic backend: Calculator launches"
   },
   {
     "instruction": "Install the new printer driver from the downloads folder.",
     "require_approval": false,
-    "_expect": "pauses with approval_required — 'install' matches the install_software risk category"
+    "_expect": "pauses with approval_required ('install' matches install_software); after approval the basic backend fails honestly — it cannot install things. Needs UFO²."
   },
   {
     "instruction": "Buy the filament that is in my shopping cart and submit the order.",
     "require_approval": false,
-    "_expect": "pauses with approval_required — matches the purchase category"
+    "_expect": "pauses with approval_required (purchase category); basic backend cannot do this — needs UFO²"
   },
   {
     "instruction": "Open the Banking app and check my balance.",
@@ -25,8 +25,8 @@
     "_expect": "denied outright — 'Banking' is in blocked_apps"
   },
   {
-    "instruction": "Take a screenshot of the desktop.",
+    "instruction": "Open Notepad.",
     "require_approval": true,
-    "_expect": "operator forced require_approval=true; waits for approval even though policy allows it"
+    "_expect": "operator forced require_approval=true; waits for approval, then really opens Notepad"
   }
 ]

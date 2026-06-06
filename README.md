@@ -15,10 +15,10 @@ Windows GUI automation) so a normal person can:
    ("Open Bambu Studio and load this 3MF file").
 5. **Approve, deny, pause, and watch** everything the agent does, locally.
 
-> ⚠️ **Experimental MVP.** This hands an AI a keyboard and mouse on your PC.
-> Run it against `localhost` with the mock backend until you have read the
-> [security notes](#security) below. It is not hardened, not multi-tenant,
-> and not packaged yet.
+> ⚠️ **Experimental MVP.** This hands an AI a keyboard and mouse on your PC —
+> the default backend really types and really launches apps. Read the
+> [security notes](#security) before pointing it at anything that matters.
+> It is not hardened, not multi-tenant, and the installer story is still raw.
 
 ## Why wrap UFO²?
 
@@ -44,7 +44,8 @@ WebSocket; the only thing listening locally is a loopback-only dashboard.
 
 ## Status (milestone 1 — done)
 
-Full vertical slice working with a **mock** automation backend:
+Full vertical slice working with the **basic** native backend (real app
+launches, real typing, real screenshots — no LLM planning yet):
 create pairing code → pair → device online → submit task → policy check →
 (approval if risky) → simulated execution → logs stream back → both UIs live.
 
@@ -74,8 +75,8 @@ browser. The control plane still runs from source for now.)
 
 ## Quickstart (dev)
 
-Requires Python 3.11+. Windows shown; macOS/Linux work for the mock slice
-(`python3 -m venv .venv` etc.).
+Requires Python 3.11+ on Windows (the control plane alone also runs on
+macOS/Linux).
 
 ```powershell
 # 0. one-time setup
@@ -86,7 +87,7 @@ powershell scripts\dev_start_server.ps1
 
 # 2. open http://localhost:8000  → click "Create pairing code"  (token: dev-admin-token)
 
-# 3. terminal 2 — device agent (mock backend, local UI on http://127.0.0.1:8766)
+# 3. terminal 2 — device agent (basic backend, local UI on http://127.0.0.1:8766)
 powershell scripts\dev_start_agent.ps1
 
 # 4. pair (either enter the code at http://127.0.0.1:8766, or:)
@@ -98,7 +99,13 @@ powershell scripts\pair_agent.ps1 -Code ABCD-1234
 ```
 
 CLI equivalents: `python -m agent.main pair --code ABCD-1234 --relay http://localhost:8000`,
-`python -m agent.main start [--backend mock|ufo]`, `status`, `unpair`.
+`python -m agent.main start [--backend basic|ufo]`, `status`, `unpair`.
+
+Backends: **basic** (default) performs real native Windows actions — open
+app, type text, real screenshots — with regex-level "planning"; anything it
+can't actually do **fails loudly**. Run it *inside* the desktop session you
+are watching, or the input lands on an invisible desktop. **ufo** is the
+UFO² integration (milestone 2) for full natural-language tasks.
 
 ## How pairing works
 
@@ -162,7 +169,7 @@ Tools: `list_devices`, `get_device_status`, `run_device_task`,
 
 ## Roadmap
 
-1. ~~Mock vertical slice~~ (this release)
+1. ~~Vertical slice with real native actions~~ (this release)
 2. Wire `UfoAutomationBackend` to UFO² on Windows (session pump, log
    forwarding, approval bridge, real screenshots)
 3. Installer: PyInstaller exe + WinSW/NSSM service + tray app, QR scan pairing
@@ -173,7 +180,7 @@ Tools: `list_devices`, `get_device_status`, `run_device_task`,
 
 ```
 agent/            device agent (CLI: python -m agent.main)
-  automation/     backend interface, mock, UFO² stub  ← integration seam
+  automation/     backend interface, basic native backend, UFO² stub  ← integration seam
   ui/             loopback web dashboard
   windows/        service / user-session worker / tray stubs
   mcp_bridge/     MCP tools over the control plane API

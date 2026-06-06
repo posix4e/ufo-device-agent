@@ -2,7 +2,7 @@
 # Local UI: http://127.0.0.1:8766
 #
 # Usage:
-#   powershell scripts/dev_start_agent.ps1                # mock backend (default)
+#   powershell scripts/dev_start_agent.ps1                # basic backend (default, real actions)
 #   powershell scripts/dev_start_agent.ps1 -Backend ufo   # once UFO2 is wired up
 #
 # Production note: this runs everything as one foreground process in your user
@@ -11,7 +11,7 @@
 # or MSIX services) + DeviceAgentUserWorker (user session) + tray app.
 # See docs/windows_service_model.md.
 param(
-    [string]$Backend = "mock"
+    [string]$Backend = "basic"
 )
 $ErrorActionPreference = "Stop"
 $repo = Split-Path -Parent $PSScriptRoot

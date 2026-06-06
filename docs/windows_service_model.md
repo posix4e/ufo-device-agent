@@ -10,7 +10,7 @@ agent.main start
  ├─ RelayClient        outbound WS to the control plane
  ├─ TaskRunner         policy + approvals + execution
  ├─ local web UI       http://127.0.0.1:8766
- └─ AutomationBackend  mock (or UFO², in-process)
+ └─ AutomationBackend  basic native actions (or UFO², in-process)
 ```
 
 This is the right *session* for GUI automation already — screenshots, UIA and

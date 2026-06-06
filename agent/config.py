@@ -28,7 +28,8 @@ class AgentSettings(BaseSettings):
     local_ui_host: str = "127.0.0.1"
     local_ui_port: int = 8766
 
-    backend: Literal["mock", "ufo"] = "mock"
+    # basic: real native Windows actions (default) | ufo: UFO² (milestone 2)
+    backend: Literal["basic", "ufo"] = "basic"
 
     device_name: str = Field(default_factory=platform.node)
 

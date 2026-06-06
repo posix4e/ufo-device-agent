@@ -20,8 +20,9 @@ jobs:
           python-version: "3.12"
       - run: pip install -e ".[dev]"
       - run: ruff check .
-      # Full mock vertical slice as subprocesses: pair -> online -> task ->
-      # logs -> policy deny -> approval flow. No UFO2 needed.
+      # Full vertical slice as subprocesses with the real `basic` backend:
+      # pair -> online -> real Notepad launch -> logs -> policy deny ->
+      # approval flow -> honest failure. Windows-only (skips on ubuntu).
       - run: pytest -q
 
   build-windows-exe:
@@ -49,13 +50,13 @@ jobs:
           ./dist/ufo-agent.exe --help
           ./dist/ufo-agent.exe status
           # Boot the agent unpaired; verify the local UI answers, then stop it.
-          $p = Start-Process -PassThru -NoNewWindow ./dist/ufo-agent.exe -ArgumentList 'start','--backend','mock'
+          $p = Start-Process -PassThru -NoNewWindow ./dist/ufo-agent.exe -ArgumentList 'start','--backend','basic'
           $ok = $false
           foreach ($i in 1..30) {
             Start-Sleep 1
             try {
               $s = Invoke-RestMethod http://127.0.0.1:8766/api/status
-              if ($s.backend -eq 'mock') { $ok = $true; break }
+              if ($s.backend -eq 'basic') { $ok = $true; break }
             } catch {}
           }
           Stop-Process -Id $p.Id -Force
